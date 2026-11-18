@@ -1,0 +1,68 @@
+name: ДТЕК — відключення за адресою
+
+# Справжній браузер перевіряє на сайті ДТЕК аварійні та планові відключення для об'єктів VoltHome
+# і кладе результат у гілку dtek-data. Адреси й код беруться з приватного репозиторію (секрет SRC_TOKEN)
+# і ніде не друкуються. Репозиторій публічний — тому перевірка не витрачає хвилин GitHub Actions.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dtek
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Кеш браузера
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-v1
+      - name: Браузер
+        run: |
+          pip install -q playwright
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Код і адреси з приватного репозиторію
+        env:
+          SRC_TOKEN: ${{ secrets.SRC_TOKEN }}
+          SRC: vova1998/campi-deye-widget
+        run: |
+          [ -n "$SRC_TOKEN" ] || { echo "Немає секрету SRC_TOKEN"; exit 1; }
+          get() { curl -sfL -H "Authorization: Bearer $SRC_TOKEN" -H "Accept: application/vnd.github.raw" \
+                  "https://api.github.com/repos/$SRC/contents/$1?ref=main" -o "$2"; }
+          mkdir -p w/dtek w/server/deye_monitor
+          get dtek/fetch.py w/dtek/fetch.py
+          get server/deye_monitor/dtek_addr.py w/server/deye_monitor/dtek_addr.py
+          get server/deye_monitor/outages.py w/server/deye_monitor/outages.py
+          get dtek/addresses.json "$RUNNER_TEMP/addr.json"
+          echo "файлів: $(find w -type f | wc -l)"
+      - name: Попередній результат
+        run: |
+          mkdir -p w/out
+          for f in status.json streets_krem.json streets_kem.json streets_dnem.json streets_oem.json; do
+            curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/dtek-data/$f" -o "w/out/$f" || rm -f "w/out/$f"
+          done
+      - name: Перевірка адрес
+        working-directory: w
+        env:
+          TZ: Europe/Kyiv
+          STREET_REGIONS: krem,kem,dnem,oem
+          OUT_DIR: out
+        run: ADDRESSES="$(cat "$RUNNER_TEMP/addr.json" 2>/dev/null || echo '{}')" python dtek/fetch.py
+      - name: Опублікувати в гілку dtek-data
+        working-directory: w/out
+        run: |
+          git init -q -b dtek-data
+          git config user.name "volthome-bot"; git config user.email "volthome-bot@users.noreply.github.com"
+          git add -A && git commit -qm "ДТЕК: $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" dtek-data
