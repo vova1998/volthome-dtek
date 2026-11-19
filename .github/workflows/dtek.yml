@@ -31,7 +31,9 @@ jobs:
       - name: Браузер
         run: |
           pip install -q playwright
-          python -m playwright install --with-deps chromium >/dev/null
+          # серверу пакетів Ubuntu інколи зле — пробуємо до 3 разів, щоб не було хибних «Run failed»
+          for i in 1 2 3; do python -m playwright install --with-deps chromium >/dev/null && break; echo "спроба $i не вдалася"; sleep 20; done
+          python -m playwright install chromium >/dev/null
       - name: Код і адреси з приватного репозиторію
         env:
           SRC_TOKEN: ${{ secrets.SRC_TOKEN }}
