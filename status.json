@@ -1,0 +1,17 @@
+{
+ "updated": 1795271176.2069485,
+ "sites": {
+  "robota": {
+   "checked": 1795271166.5476432,
+   "event": null,
+   "error": null,
+   "group": "20.1"
+  },
+  "home": {
+   "checked": 1795271171.3221605,
+   "event": null,
+   "error": null,
+   "group": "5.2"
+  }
+ }
+}
